@@ -33,6 +33,23 @@ const initWebSocket = () => {
                     if ("TextFrom" == objData.Event) {
                         console.log(objData);
                     }
+                    else if ("StartRTC" == objData.Event) {
+                        console.log(objData);
+                        g_objUserData.nCalling = 1;
+                        start(true);
+                    }
+                    else if ("SDP" == objData.Event) {
+                        console.log("SDP recieved");
+                        g_objUserData.PC.setRemoteDescription(new RTCSessionDescription(objData.sdp)).then(function() {
+                            if (objData.sdp.type == 'offer') {
+                                g_objUserData.PC.createAnswer().then(createdDescription).catch(errorHandler);
+                            }
+                        }).catch(errorHandler);
+                    }
+                    else if ("Ice" == objData.Event) {
+                        console.log("Ice recieved");
+                        g_objUserData.PC.addIceCandidate(new RTCIceCandidate(objData.ice)).catch(errorHandler);
+                    }
                 }
                 else if ("WhoAmI" == objData.Message) {
                     console.log("I am: " + objData.ID);
@@ -43,6 +60,11 @@ const initWebSocket = () => {
     catch (exception) {
         console.log('ERROR: ' + exception);
     }
+}
+
+const gotRemoteStream = (event) => {
+    console.log('got remote stream');
+    document.getElementById('remote').srcObject = event.streams[0];
 }
 
 const SendMyID = () => {
@@ -68,8 +90,8 @@ const SetGameID = (nGameID) => {
 const MainFrame = () => {
     let sPage = "";
     sPage += "<input id='idNUmbr' placeholder='id'></input>";
-    sPage += "<input id='chat' placeholder='chat'></input>";
-    sPage += "<button onClick='sendChat()'>Go</button>";
+    // sPage += "<input id='chat' placeholder='chat'></input>";
+    // sPage += "<button onClick='sendChat()'>Go</button>";
     sPage += "<button onClick='submitID()'>Submit ID</button>";
     sPage += "<button onClick='startRTC()'>Run RTC</button>";
     sPage += "<div>";
@@ -77,6 +99,100 @@ const MainFrame = () => {
     sPage += "<video id='remote' style='border: 1px solid; width: 500px; height: 500px;' autoplay muted ></video>";
     sPage += "</div>";
     document.getElementById('Main').innerHTML = sPage;
+}
+
+const startRTC = () => {
+    let objData = {};
+    objData.ToID = parseInt(2);
+    objData.Type = "Jake";
+    objData.GameID = 0;
+    objData.Message = "Msg2ID";
+    objData.ID = g_objUserData.id;
+    objData.Event = "StartRTC";
+    let jsonData = JSON.stringify(objData);
+    sendMessage(jsonData);
+
+    g_objUserData.nCalling = 2;
+
+    start(false);
+}
+
+const start = (bCaller) => {
+    g_objUserData.PC = new RTCPeerConnection({ 'iceServers':
+        [ {'urls': 'stun:stun.stunprotocol.org:3478'}, {'urls': 'stun:stun.l.google.com:19302'} ]
+    });
+
+    g_objUserData.PC.onicecandidate = gotIceCandidate;
+    g_objUserData.PC.ontrack = gotRemoteStream;
+
+    PCStream(bCaller);
+}
+
+
+const PCStream = (bCaller) => {
+    setTimeout(function() {
+        if (!g_objUserData.LocalStream) {
+            PCStream(bCaller);
+            console.log("Still trying");
+        }
+        else {
+            g_objUserData.PC.addStream(g_objUserData.LocalStream);
+            if (bCaller) {
+                console.log("Caller making offer");
+                g_objUserData.PC.createOffer().then(createdDescription).catch(errorHandler);
+            }
+        }
+    }, 500);
+}
+
+const gotIceCandidate = (event) => {
+    if (event.candidate != null) {
+        let objData = {};
+        objData.ToID = parseInt(g_objUserData.nCalling);
+        objData.Type = "Jake";
+        objData.GameID = 0;
+        objData.ID = g_objUserData.id;
+        objData.Event = "Ice";
+        objData.Message = "Msg2ID";
+        objData.ice = event.candidate;
+        let jsonData = JSON.stringify(objData);
+        sendMessage(jsonData);
+    }
+}
+
+const createdDescription = (description) => {
+    console.log('got description');
+
+    g_objUserData.PC.setLocalDescription(description).then(function() {
+
+        let objData = {};
+        objData.ToID = parseInt(g_objUserData.nCalling);
+        objData.Type = "Jake";
+        objData.GameID = 0;
+        objData.Message = "Msg2ID";
+        objData.ID = g_objUserData.id;
+        objData.Event = "SDP";
+        objData.sdp = g_objUserData.PC.localDescription;
+        let jsonData = JSON.stringify(objData);
+        sendMessage(jsonData);
+
+    }).catch(errorHandler);
+}
+
+const getUserMediaSuccess = (stream) => {
+    g_objUserData.LocalStream = stream;
+    document.getElementById('local').srcObject = stream;
+}
+
+const setRTCConstraints = () => {
+    if (navigator.mediaDevices.getUserMedia)
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(getUserMediaSuccess).catch(errorHandler);
+    else
+        alert('Your browser does not support getUserMedia API');
+}
+
+const errorHandler = (error) => {
+    console.log(error);
 }
 
 const sendChat = () => {
@@ -104,6 +220,7 @@ const sendChat = () => {
 const submitID = () => {
     g_objUserData.id = Number(document.getElementById('idNUmbr').value);
     initWebSocket();
+    setRTCConstraints();
 }
 
 const getCommentChain = () => {

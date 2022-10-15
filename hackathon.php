@@ -165,6 +165,7 @@ function pullComment ($nID) {
     $objComment->created = $row["created"];
     $objComment->prev = $row["prev"];
     $objComment->parent = $row["parent"];
+    $objComment->title = $row["title"];
     $objComment->tags = fetchTagNames(explode(" ", $row["tags"]));
     return json_encode($objComment);
 }
@@ -191,6 +192,7 @@ function pullBurstComments ($nPageNumber) {
         $aComments[$i]->created = $row["created"];
         $aComments[$i]->prev = $row["prev"];
         $aComments[$i]->parent = $row["parent"];
+        $aComments[$i]->title = $row["title"];
 
     }
     return json_encode ($aComments);
@@ -350,8 +352,8 @@ function postComment ($jsonComment) {
     if (0 == $objCommentData->prev)
         $sSnowflake = generateSnowflake ();
 
-    $stmtI = $dbconnect->prepare("INSERT INTO Comments (uuid, dentry, prev, tags, snowflake, parent) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmtI->bind_param("isiss", $objCommentData->uuid, $objCommentData->dentry, $objCommentData->prev, $sTags, $sSnowflake, $objCommentData->parent);
+    $stmtI = $dbconnect->prepare("INSERT INTO Comments (uuid, dentry, prev, tags, snowflake, parent, title) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmtI->bind_param("isisss", $objCommentData->uuid, $objCommentData->dentry, $objCommentData->prev, $sTags, $sSnowflake, $objCommentData->parent, $objCommentData->title);
     $bSent = $stmtI->execute();
     $stmtI->close();
 
@@ -463,6 +465,7 @@ function searchByTag ($sTag) {
         $aComments[$i]->tags = fetchTagNames(explode(" ", $row["tags"]));
         $aComments[$i]->snowflake = $row["snowflake"];
         $aComments[$i]->created = $row["created"];
+        $aComments[$i]->title = $row["title"];
     }
     return json_encode ($aComments);
 }
@@ -485,8 +488,8 @@ function search ($sSearch) {
 
     for ($i=0; $i<count($aSearchKeys); $i++) {
         $sCurrSearchKey = "%" . $aSearchKeys[$i] . "%";
-        $stmtI = $dbconnect->prepare("SELECT id FROM Comments WHERE dentry LIKE ?");
-        $stmtI->bind_param("s", $sCurrSearchKey);
+        $stmtI = $dbconnect->prepare("SELECT id FROM Comments WHERE dentry LIKE ? OR title LIKE ?");
+        $stmtI->bind_param("ss", $sCurrSearchKey, $sCurrSearchKey);
         $stmtI->execute();
         $tResult = $stmtI->get_result();
         for ($x=0; $x<$tResult->num_rows; $x++) {
@@ -561,6 +564,7 @@ function search ($sSearch) {
         $objComment->prev = $row["prev"];
         $objComment->parent = $row["parent"];
         $objComment->created = $row["created"];
+        $objComment->title = $row["title"];
         $objComment->tags = fetchTagNames(explode(" ", $row["tags"]));
         $aResultData[$i] = $objComment;
     }
@@ -590,6 +594,7 @@ function getCommentChain ($nParentID) {
         $aComments[$i]->prev = $row["prev"];
         $aComments[$i]->parent = $row["parent"];
         $aComments[$i]->snowflake = $row["snowflake"];
+        $aComments[$i]->title = $row["title"];
         $aComments[$i]->created = $row["created"];
     }
 
@@ -607,6 +612,7 @@ function getCommentChain ($nParentID) {
     $objParent->parent = $row["parent"];
     $objParent->snowflake = $row["snowflake"];
     $objParent->created = $row["created"];
+    $objParent->title = $row["title"];
     array_push($aComments, $objParent);
 
     return json_encode ($aComments);

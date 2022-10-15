@@ -1,21 +1,109 @@
 var g_objUserData = {};
 
 onload = () => {
+    PrepRTCToBrowser();
     MainFrame();
 }
 
+var wsUri = "ws://jakehenryparker.com:58007";
+if (window.location.protocol === 'https:') {
+    wsUri = "wss://jakehenryparker.com:57007/wss";
+}
+var wSocket = null;
+const initWebSocket = () => {
+    try {
+        if (typeof MozWebSocket == 'function')
+            WebSocket = MozWebSocket;
+        if (wSocket && wSocket.readyState == 1) // OPEN
+            wSocket.close();
+        wSocket = new WebSocket(wsUri);
+        wSocket.onopen = (evt) => {
+            SendMyID();
+            SetGameID(0);
+            console.log("Connection established.");
+        }
+        wSocket.onclose = (evt) => {
+            console.log("Connection closed");
+        };
+        wSocket.onmessage = (evt) => {
+            let objData = JSON.parse(evt.data);
+            let sType = objData.Type;
+            if ("Jake" == sType) {
+                if ("Msg2ID" == objData.Message) {
+                    if ("TextFrom" == objData.Event) {
+                        console.log(objData);
+                    }
+                }
+                else if ("WhoAmI" == objData.Message) {
+                    console.log("I am: " + objData.ID);
+                }
+            }
+        }
+    }
+    catch (exception) {
+        console.log('ERROR: ' + exception);
+    }
+}
+
+const SendMyID = () => {
+    let objData = {};
+    objData.Type = "Jake";
+    objData.GameID = 0;
+    objData.ID = g_objUserData.id;
+    objData.Message = "MyID";
+    let jsonData = JSON.stringify(objData);
+    sendMessage(jsonData);
+}
+
+const SetGameID = (nGameID) => {
+    let objData = {};
+    objData.Type = "Jake";
+    objData.Message = "SetGameID";
+    objData.GameID = parseInt(nGameID);
+    let jsonData = JSON.stringify(objData);
+    sendMessage(jsonData);
+    g_objUserData.nGameID = nGameID;
+}
+
 const MainFrame = () => {
-    g_objUserData.id = 1;
-
     let sPage = "";
-    sPage += "<input id='un'></input>";
-    sPage += "<input id='pw'></input>"
-    sPage += "<button onClick='storeChat()'>Go</button>";
-    sPage += "<div id='feedback'></div>";
+    sPage += "<input id='idNUmbr' placeholder='id'></input>";
+    sPage += "<input id='chat' placeholder='chat'></input>";
+    sPage += "<button onClick='sendChat()'>Go</button>";
+    sPage += "<button onClick='submitID()'>Submit ID</button>";
+    sPage += "<button onClick='startRTC()'>Run RTC</button>";
+    sPage += "<div>";
+    sPage += "<video id='local' style='border: 1px solid; width: 500px; height: 500px;' autoplay muted ></video>";
+    sPage += "<video id='remote' style='border: 1px solid; width: 500px; height: 500px;' autoplay muted ></video>";
+    sPage += "</div>";
     document.getElementById('Main').innerHTML = sPage;
+}
 
-    // postComment();
-    getCommentChain();
+const sendChat = () => {
+    let objData = {};
+    if (1 == g_objUserData.id)
+        objData.ToID = parseInt(2);
+    else
+        objData.ToID = parseInt(1);
+    objData.Type = "Jake";
+    objData.GameID = 0;
+    objData.Message = "Msg2ID";
+    objData.ID = g_objUserData.id;
+    objData.Event = "TextFrom";
+    objData.Chat = document.getElementById('chat').value;
+    let jsonData = JSON.stringify(objData);
+    sendMessage(jsonData);
+
+    let objChat = {};
+    objChat.to = objData.ToID;
+    objChat.from = g_objUserData.id;
+    objChat.chat = document.getElementById('chat').value;
+    storeChat(objChat);
+}
+
+const submitID = () => {
+    g_objUserData.id = Number(document.getElementById('idNUmbr').value);
+    initWebSocket();
 }
 
 const getCommentChain = () => {
@@ -63,15 +151,11 @@ const pullChats = () => {
     }
 }
 
-const storeChat = () => {
-    let objChat = {};
-    objChat.to = g_objUserData.id;
-    objChat.from = 2;
-    objChat.chat = document.getElementById('un').value;
+const storeChat = (objChat) => {
     let jsonChat = JSON.stringify(objChat);
     postFileFromServer("hackathon.php", "storeChat=" + encodeURIComponent(jsonChat), storeChatCallback);
     function storeChatCallback(data) {
-        alert(data);
+        console.log(data);
     }
 }
 
@@ -197,4 +281,69 @@ const postFileFromServer = (url, sData, doneCallback) => {
             doneCallback(xhr.status == 200 ? xhr.responseText : null);
         }
     }
+}
+
+const stopWebSocket = () => {
+    if (wSocket)
+        wSocket.close(1000, "Deliberate disconnection");
+}
+
+const close_socket = () => {
+    if (wSocket.readyState === WebSocket.OPEN)
+        wSocket.close(1000, "Deliberate disconnection");
+}
+
+const CheckConnection = () => {
+    if (!g_objUserData.sUsername)
+        return;
+    if (!wSocket)
+        initWebSocket();
+    else if (wSocket.readyState == 3) { // Closed
+        wSocket = null;
+        initWebSocket();
+    }
+}
+
+const sendMessage = (jsonData) => {
+    if (wSocket != null && 1 == wSocket.readyState)
+        wSocket.send(jsonData);
+    else {
+        console.log("ws error");
+        CheckConnection();
+        sendMessage.jsonData = jsonData;
+        setTimeout(function(){wSocket.send(sendMessage.jsonData);}, 1500);
+    }
+}
+
+var hidden, visibilityChange;
+const ShowVisibilityChange = () => {
+    //var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if ('visible' === document.visibilityState)
+        CheckConnection();
+}
+
+const VisiblitySetup = () => {
+    if (typeof document.hidden !== "undefined") { // Opera 12.10 and Firefox 18 and later support
+        hidden = "hidden";
+        visibilityChange = "visibilitychange";
+    }
+    else if (typeof document.msHidden !== "undefined") {
+        hidden = "msHidden";
+        visibilityChange = "msvisibilitychange";
+    }
+    else if (typeof document.webkitHidden !== "undefined") {
+        hidden = "webkitHidden";
+        visibilityChange = "webkitvisibilitychange";
+    }
+    document.addEventListener(visibilityChange, ShowVisibilityChange, false);
+}
+
+VisiblitySetup();
+
+const PrepRTCToBrowser = () => {
+    navigator.getUserMedia = navigator.getUserMedia || navigator.mozGetUserMedia || navigator.webkitGetUserMedia;
+    window.RTCPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+    window.RTCIceCandidate = window.RTCIceCandidate || window.mozRTCIceCandidate || window.webkitRTCIceCandidate;
+    window.RTCSessionDescription = window.RTCSessionDescription || window.mozRTCSessionDescription || window.webkitRTCSessionDescription;
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || window.mozSpeechRecognition || window.msSpeechRecognition || window.oSpeechRecognition;
 }

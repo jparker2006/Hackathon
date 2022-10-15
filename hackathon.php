@@ -35,8 +35,6 @@ else if (isset($_POST['search']))
 else if (isset($_POST['getCommentChain']))
     $nParentID = $_POST['getCommentChain'];
 
-
-
 if ($sUsername)
     $sFeedback = uniqueUN ($sUsername);
 else if ($jsonCredentials)
